@@ -198,10 +198,11 @@ Dev Accuracy = 0.834
 
 
 
+
 实验结果如下：
 
 
-<img width="1122" height="670" alt="SwanLab训练过程可视化" src="https://github.com/user-attachments/assets/5a177def-8151-46ca-b414-8b144d374b7f" />
+<img width="1579" height="696" alt="屏幕截图 2026-09-07 213833" src="https://github.com/user-attachments/assets/0f86abd0-6470-4f77-837a-df5c8a63f9ac" />
 
 
 
