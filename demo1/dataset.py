@@ -99,34 +99,6 @@ class NewsDataset(Dataset):
 
         return encode
 
-
-        return {
-
-
-            "input_ids":
-
-                encode["input_ids"].squeeze(0),
-
-
-
-            "attention_mask":
-
-                encode["attention_mask"].squeeze(0),
-
-
-
-            "labels":
-
-                torch.tensor(
-
-                    label,
-
-                    dtype=torch.long
-
-                )
-
-        }
-
 #添加动态pad
 def get_collate_fn(tokenizer):
 

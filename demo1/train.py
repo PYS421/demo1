@@ -1,6 +1,8 @@
+import os
 import torch
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
+import swanlab
 
 
 # 自己封装的评价指标
@@ -14,7 +16,8 @@ from metrics import (
 
 from config import *
 
-#添加get-collate-fn
+
+# 添加 get_collate_fn
 from dataset import (
     load_data,
     NewsDataset,
@@ -22,24 +25,23 @@ from dataset import (
 )
 
 
-from model import build_model
+from model import BertClassifier
 
 
 from utils import seed_everything
+
 
 device = torch.device(
     "cuda"
     if torch.cuda.is_available()
     else "cpu"
 )
-
-
-
-
-
-
 # 评价函数
-def evaluate(model, loader):
+def evaluate(
+        model,
+        loader,
+        num_classes
+):
 
 
     model.eval()
@@ -50,22 +52,16 @@ def evaluate(model, loader):
     labels = []
 
 
-
     with torch.no_grad():
-
 
         for batch in loader:
 
 
-
             input_ids = batch["input_ids"].to(device)
-
 
             mask = batch["attention_mask"].to(device)
 
-
             y = batch["labels"].to(device)
-
 
 
             logits = model(
@@ -77,7 +73,6 @@ def evaluate(model, loader):
             )
 
 
-
             pred = torch.argmax(
 
                 logits,
@@ -87,27 +82,21 @@ def evaluate(model, loader):
             )
 
 
-
             preds.extend(
 
-                pred.cpu().numpy()
+                pred.cpu().tolist()
 
             )
 
 
             labels.extend(
 
-                y.cpu().numpy()
+                y.cpu().tolist()
 
             )
 
 
-
-
-
-    # 调用自己的metrics.py
-
-
+    # 调用自己的 metrics.py
     acc = accuracy(
 
         preds,
@@ -123,7 +112,7 @@ def evaluate(model, loader):
 
         labels,
 
-        num_classes=len(set(labels))
+        num_classes
 
     )
 
@@ -134,19 +123,23 @@ def evaluate(model, loader):
 
         labels,
 
-        num_classes=len(set(labels))
+        num_classes
 
     )
 
 
+    # Macro-F1
+    # 每个类别分别计算 F1
+    # 最后再求平均
     score_f1 = f1(
 
-        p,
+        preds,
 
-        r
+        labels,
+
+        num_classes
 
     )
-
 
 
     return {
@@ -166,15 +159,32 @@ def evaluate(model, loader):
     }
 
 
-
-
-
-
-
-
+# 训练函数
 def train():
 
+
     seed_everything()
+
+
+    # 创建模型保存目录
+    os.makedirs(
+
+        "checkpoints",
+
+        exist_ok=True
+
+    )
+
+
+    # SwanLab
+    swanlab.init(
+
+        project="demo1",
+
+        experiment_name="bert-text-classification"
+
+    )
+
 
     # 1. 加载数据
     train_data = load_data(
@@ -182,7 +192,9 @@ def train():
         TRAIN_PATH
 
     )
+
     print(train_data[:3])
+
 
     dev_data = load_data(
 
@@ -199,8 +211,10 @@ def train():
 
 
     # 2. 获取类别
-    # list dict写法
+    # list + dict 写法
     label_names = set()
+
+
     for item in train_data:
 
         label_names.add(
@@ -210,38 +224,41 @@ def train():
         )
 
 
-
     labels = sorted(
 
         list(label_names)
 
     )
 
+
+    num_classes = len(labels)
+
+
     label2id = {
 
 
-        label:i
+        label: i
 
 
-        for i,label in enumerate(labels)
+        for i, label in enumerate(labels)
 
 
     }
+
 
     id2label = {
 
 
-        i:label
+        i: label
 
 
-        for label,i in label2id.items()
+        for label, i in label2id.items()
 
 
     }
 
+
     # 3. 添加数字标签
-
-
     for dataset in [
 
         train_data,
@@ -262,60 +279,83 @@ def train():
 
             ]
 
+    # Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
-    MODEL_NAME
-        )
 
-
-    collate_fn = get_collate_fn(
-        tokenizer
-        )
-
-    # 4. Dataset
-    train_loader = DataLoader(
-
-    NewsDataset(
-        train_data,
-        tokenizer
-    ),
-
-    batch_size=BATCH_SIZE,
-
-    shuffle=True,
-
-    collate_fn=collate_fn
+        MODEL_NAME
 
     )
 
 
 
+    # 动态 Padding
+    collate_fn = get_collate_fn(
+
+        tokenizer
+
+    )
+
+
+    # 4. Dataset / DataLoader
+    train_loader = DataLoader(
+
+        NewsDataset(
+
+            train_data,
+
+            tokenizer
+
+        ),
+
+        batch_size=BATCH_SIZE,
+
+        shuffle=True,
+
+        collate_fn=collate_fn
+
+    )
+
 
     dev_loader = DataLoader(
 
-    NewsDataset(
-        dev_data,
-        tokenizer
-    ),
+        NewsDataset(
 
-    batch_size=BATCH_SIZE,
+            dev_data,
 
-    collate_fn=collate_fn
+            tokenizer
+
+        ),
+
+        batch_size=BATCH_SIZE,
+
+        collate_fn=collate_fn
+
+    )
+
+
+    test_loader = DataLoader(
+
+        NewsDataset(
+
+            test_data,
+
+            tokenizer
+
+        ),
+
+        batch_size=BATCH_SIZE,
+
+        collate_fn=collate_fn
 
     )
 
 
     # 5. 创建模型
-    model = build_model(
+    model = BertClassifier(
 
+        MODEL_NAME,
 
-        len(labels),
-
-
-        id2label,
-
-
-        label2id
-
+        num_classes
 
     )
 
@@ -323,124 +363,88 @@ def train():
     model.to(device)
 
 
-
-
-
-
+    # 优化器
     optimizer = torch.optim.AdamW(
-
 
         model.parameters(),
 
-
         lr=LR
-
 
     )
 
 
-
-
-
-    # 自己计算loss
+    # 自己计算 Loss
     loss_fn = torch.nn.CrossEntropyLoss()
+
+
     best = 0
 
 
-
-
-
-
-
-    # 6.训练
+    # 6. 训练
     for epoch in range(EPOCHS):
-
 
 
         model.train()
 
 
-
         total_loss = 0
-
-
-
 
 
         for batch in train_loader:
 
 
-
             optimizer.zero_grad()
-
-
-
 
 
             y = batch["labels"].to(device)
 
 
-
-
-
             logits = model(
-
 
                 input_ids=batch["input_ids"].to(device),
 
-
                 attention_mask=batch["attention_mask"].to(device)
 
-
             )
-
-
-
 
 
             loss = loss_fn(
 
-
                 logits,
-
 
                 y
 
-
             )
-
-
 
 
             loss.backward()
 
 
-
             optimizer.step()
-
 
 
             total_loss += loss.item()
 
 
-
-
-
-
-        # 7.验证
+        # 7. 验证
         result = evaluate(
-
 
             model,
 
+            dev_loader,
 
-            dev_loader
-
+            num_classes
 
         )
 
 
+        epoch_loss = (
 
+            total_loss /
+
+            len(train_loader)
+
+        )
 
 
         print("====================")
@@ -455,15 +459,13 @@ def train():
         )
 
 
-
         print(
 
             "loss:",
 
-            total_loss / len(train_loader)
+            epoch_loss
 
         )
-
 
 
         print(
@@ -475,7 +477,6 @@ def train():
         )
 
 
-
         print(
 
             "precision:",
@@ -483,7 +484,6 @@ def train():
             result["precision"]
 
         )
-
 
 
         print(
@@ -495,7 +495,6 @@ def train():
         )
 
 
-
         print(
 
             "f1:",
@@ -505,31 +504,37 @@ def train():
         )
 
 
+        # SwanLab记录
+        swanlab.log({
 
+            "epoch": epoch + 1,
 
+            "loss": epoch_loss,
 
+            "accuracy": result["accuracy"],
 
+            "precision": result["precision"],
+
+            "recall": result["recall"],
+
+            "f1": result["f1"]
+
+        })
 
         # 保存最佳模型
         if result["f1"] > best:
 
 
-
             best = result["f1"]
-
 
 
             torch.save(
 
-
                 model.state_dict(),
-
 
                 "checkpoints/best_model.pth"
 
-
             )
-
 
 
             print(
@@ -539,9 +544,98 @@ def train():
             )
 
 
+    # 8. 加载最佳模型
+    model.load_state_dict(
 
+        torch.load(
+
+            "checkpoints/best_model.pth",
+
+            map_location=device
+
+        )
+
+    )
+
+
+    # 9. Test Evaluation
+    test_result = evaluate(
+
+        model,
+
+        test_loader,
+
+        num_classes
+
+    )
+
+
+    print("====================")
+
+    print("Test Result")
+
+
+    print(
+
+        "test accuracy:",
+
+        test_result["accuracy"]
+
+    )
+
+
+    print(
+
+        "test precision:",
+
+        test_result["precision"]
+
+    )
+
+
+    print(
+
+        "test recall:",
+
+        test_result["recall"]
+
+    )
+
+
+    print(
+
+        "test f1:",
+
+        test_result["f1"]
+
+    )
+
+
+    # SwanLab记录Test结果
+
+    swanlab.log({
+
+        "test_accuracy":
+
+            test_result["accuracy"],
+
+        "test_precision":
+
+            test_result["precision"],
+
+        "test_recall":
+
+            test_result["recall"],
+
+        "test_f1":
+
+            test_result["f1"]
+
+    })
+
+
+# 主程序
 
 if __name__ == "__main__":
-
 
     train()

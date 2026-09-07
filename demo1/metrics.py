@@ -5,14 +5,13 @@ def accuracy(
 
     correct = 0
 
-
-    for p,y in zip(preds,labels):
+    for p, y in zip(preds, labels):
 
         if p == y:
             correct += 1
 
-
     return correct / len(labels)
+
 
 def precision(
         preds,
@@ -20,34 +19,42 @@ def precision(
         num_classes
 ):
 
-    result=[]
-
+    result = []
 
     for cls in range(num_classes):
 
-        TP=0
-        FP=0
+        pred_set = {
+            i
+            for i, p in enumerate(preds)
+            if p == cls
+        }
 
+        true_set = {
+            i
+            for i, y in enumerate(labels)
+            if y == cls
+        }
 
-        for p,y in zip(preds,labels):
+        TP = len(
+            pred_set & true_set
+        )
 
-            if p==cls and y==cls:
-                TP+=1
+        FP = len(
+            pred_set - true_set
+        )
 
-            elif p==cls and y!=cls:
-                FP+=1
+        if TP + FP == 0:
 
-
-        if TP+FP==0:
-            result.append(0)
+            p = 0
 
         else:
-            result.append(
-                TP/(TP+FP)
-            )
 
+            p = TP / (TP + FP)
 
-    return sum(result)/num_classes
+        result.append(p)
+
+    return sum(result) / num_classes
+
 
 def recall(
         preds,
@@ -55,41 +62,105 @@ def recall(
         num_classes
 ):
 
-    result=[]
-
+    result = []
 
     for cls in range(num_classes):
 
-        TP=0
-        FN=0
+        pred_set = {
+            i
+            for i, p in enumerate(preds)
+            if p == cls
+        }
 
+        true_set = {
+            i
+            for i, y in enumerate(labels)
+            if y == cls
+        }
 
-        for p,y in zip(preds,labels):
+        TP = len(
+            pred_set & true_set
+        )
 
-            if p==cls and y==cls:
-                TP+=1
+        FN = len(
+            true_set - pred_set
+        )
 
-            elif p!=cls and y==cls:
-                FN+=1
+        if TP + FN == 0:
 
-
-        if TP+FN==0:
-            result.append(0)
+            r = 0
 
         else:
-            result.append(
-                TP/(TP+FN)
-            )
 
+            r = TP / (TP + FN)
 
-    return sum(result)/num_classes
+        result.append(r)
+
+    return sum(result) / num_classes
+
 
 def f1(
-        p,
-        r
+        preds,
+        labels,
+        num_classes
 ):
 
-    if p+r==0:
-        return 0
+    result = []
 
-    return 2*p*r/(p+r)
+    for cls in range(num_classes):
+
+        pred_set = {
+            i
+            for i, p in enumerate(preds)
+            if p == cls
+        }
+
+        true_set = {
+            i
+            for i, y in enumerate(labels)
+            if y == cls
+        }
+
+        TP = len(
+            pred_set & true_set
+        )
+
+        FP = len(
+            pred_set - true_set
+        )
+
+        FN = len(
+            true_set - pred_set
+        )
+
+        if TP + FP == 0:
+
+            p = 0
+
+        else:
+
+            p = TP / (TP + FP)
+
+
+        if TP + FN == 0:
+
+            r = 0
+
+        else:
+
+            r = TP / (TP + FN)
+
+
+        if p + r == 0:
+
+            score = 0
+
+        else:
+
+            score = 2 * p * r / (p + r)
+
+
+        result.append(score)
+
+
+    return sum(result) / num_classes

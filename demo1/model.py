@@ -67,25 +67,3 @@ class BertClassifier(nn.Module):
 
 
         return logits
-
-
-
-
-
-def build_model(
-        num_labels,
-        id2label=None,
-        label2id=None
-):
-
-
-    model = BertClassifier(
-
-        model_name=MODEL_NAME,
-
-        num_labels=num_labels
-
-    )
-
-
-    return model
