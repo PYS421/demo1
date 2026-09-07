@@ -188,16 +188,20 @@ Dev Accuracy = 0.834
 
 使用 SwanLab 对训练过程进行可视化，包括：
 
-- Train Loss
-- Train Accuracy
-- Dev Loss
-- Dev Accuracy
+- Train Loss：训练集损失
+- Train Accuracy：训练集准确率
+- Dev Loss：验证集损失
+- Dev Accuracy：验证集准确率
+- Dev Precision：验证集精确率
+- Dev Recall：验证集召回率
+- Dev F1：验证集 F1 值
+
 
 
 实验结果如下：
 
 
-<img width="1122" height="670" alt="image" src="https://github.com/user-attachments/assets/5a177def-8151-46ca-b414-8b144d374b7f" />
+<img width="1122" height="670" alt="SwanLab训练过程可视化" src="https://github.com/user-attachments/assets/5a177def-8151-46ca-b414-8b144d374b7f" />
 
 
 
