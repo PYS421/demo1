@@ -1,166 +1,89 @@
-def accuracy(
-        preds,
-        labels
-):
+class ClassificationMetrics:
 
-    correct = 0
+    def __init__(self, preds, labels, num_classes):
+        self.preds = preds
+        self.labels = labels
+        self.num_classes = num_classes
 
-    for p, y in zip(preds, labels):
+        # 每个类别的 TP、FP、FN
+        self.tp = [0] * num_classes
+        self.fp = [0] * num_classes
+        self.fn = [0] * num_classes
 
-        if p == y:
-            correct += 1
+        # 只计算一次
+        for p, y in zip(self.preds, self.labels):
+            if p == y:
+                self.tp[y] += 1
+            else:
+                self.fp[p] += 1
+                self.fn[y] += 1
 
-    return correct / len(labels)
-
-
-def precision(
-        preds,
-        labels,
-        num_classes
-):
-
-    result = []
-
-    for cls in range(num_classes):
-
-        pred_set = {
-            i
-            for i, p in enumerate(preds)
-            if p == cls
-        }
-
-        true_set = {
-            i
-            for i, y in enumerate(labels)
-            if y == cls
-        }
-
-        TP = len(
-            pred_set & true_set
+    def accuracy(self):
+        correct = sum(
+            p == y
+            for p, y in zip(self.preds, self.labels)
         )
 
-        FP = len(
-            pred_set - true_set
-        )
+        return correct / len(self.labels)
 
-        if TP + FP == 0:
+    def precision(self):
+        result = []
 
-            p = 0
+        for cls in range(self.num_classes):
+            tp = self.tp[cls]
+            fp = self.fp[cls]
 
-        else:
+            if tp + fp == 0:
+                score = 0
+            else:
+                score = tp / (tp + fp)
 
-            p = TP / (TP + FP)
+            result.append(score)
 
-        result.append(p)
+        return sum(result) / self.num_classes
 
-    return sum(result) / num_classes
+    def recall(self):
+        result = []
 
+        for cls in range(self.num_classes):
+            tp = self.tp[cls]
+            fn = self.fn[cls]
 
-def recall(
-        preds,
-        labels,
-        num_classes
-):
+            if tp + fn == 0:
+                score = 0
+            else:
+                score = tp / (tp + fn)
 
-    result = []
+            result.append(score)
 
-    for cls in range(num_classes):
+        return sum(result) / self.num_classes
 
-        pred_set = {
-            i
-            for i, p in enumerate(preds)
-            if p == cls
-        }
+    def f1(self):
+        result = []
 
-        true_set = {
-            i
-            for i, y in enumerate(labels)
-            if y == cls
-        }
+        for cls in range(self.num_classes):
+            tp = self.tp[cls]
+            fp = self.fp[cls]
+            fn = self.fn[cls]
 
-        TP = len(
-            pred_set & true_set
-        )
+            if tp + fp == 0:
+                precision = 0
+            else:
+                precision = tp / (tp + fp)
 
-        FN = len(
-            true_set - pred_set
-        )
+            if tp + fn == 0:
+                recall = 0
+            else:
+                recall = tp / (tp + fn)
 
-        if TP + FN == 0:
+            if precision + recall == 0:
+                score = 0
+            else:
+                score = (
+                    2 * precision * recall
+                    / (precision + recall)
+                )
 
-            r = 0
+            result.append(score)
 
-        else:
-
-            r = TP / (TP + FN)
-
-        result.append(r)
-
-    return sum(result) / num_classes
-
-
-def f1(
-        preds,
-        labels,
-        num_classes
-):
-
-    result = []
-
-    for cls in range(num_classes):
-
-        pred_set = {
-            i
-            for i, p in enumerate(preds)
-            if p == cls
-        }
-
-        true_set = {
-            i
-            for i, y in enumerate(labels)
-            if y == cls
-        }
-
-        TP = len(
-            pred_set & true_set
-        )
-
-        FP = len(
-            pred_set - true_set
-        )
-
-        FN = len(
-            true_set - pred_set
-        )
-
-        if TP + FP == 0:
-
-            p = 0
-
-        else:
-
-            p = TP / (TP + FP)
-
-
-        if TP + FN == 0:
-
-            r = 0
-
-        else:
-
-            r = TP / (TP + FN)
-
-
-        if p + r == 0:
-
-            score = 0
-
-        else:
-
-            score = 2 * p * r / (p + r)
-
-
-        result.append(score)
-
-
-    return sum(result) / num_classes
+        return sum(result) / self.num_classes

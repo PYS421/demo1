@@ -4,19 +4,11 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 import swanlab
 
-
 # 自己封装的评价指标
-from metrics import (
-    accuracy,
-    precision,
-    recall,
-    f1
-)
-
+from metrics import ClassificationMetrics
 
 # Config
 from config import parse_config
-
 
 # Dataset
 from dataset import (
@@ -25,15 +17,14 @@ from dataset import (
     get_collate_fn
 )
 
-
 # Model
 from model import BertClassifier
 
 # Seed
 from utils import seed_everything
 
-# Device
 
+# Device
 device = torch.device(
     "cuda"
     if torch.cuda.is_available()
@@ -42,10 +33,10 @@ device = torch.device(
 
 
 # 评价函数
-
 def evaluate(
     model,
     loader,
+    loss_fn,
     num_classes
 ):
 
@@ -53,6 +44,8 @@ def evaluate(
 
     preds = []
     labels = []
+
+    total_loss = 0
 
     with torch.no_grad():
 
@@ -70,11 +63,21 @@ def evaluate(
                 "labels"
             ].to(device)
 
+            # 模型预测
             logits = model(
                 input_ids=input_ids,
                 attention_mask=mask
             )
 
+            # Loss
+            loss = loss_fn(
+                logits,
+                y
+            )
+
+            total_loss += loss.item()
+
+            # 获取预测类别
             pred = torch.argmax(
                 logits,
                 dim=1
@@ -88,48 +91,35 @@ def evaluate(
                 y.cpu().tolist()
             )
 
-
-    # Accuracy
-    acc = accuracy(
-        preds,
-        labels
-    )
-
-
-    # Precision
-    p = precision(
+    # 创建指标对象
+    metrics = ClassificationMetrics(
         preds,
         labels,
         num_classes
     )
-
-
-    # Recall
-    r = recall(
-        preds,
-        labels,
-        num_classes
-    )
-
-
-    # Macro-F1
-    score_f1 = f1(
-        preds,
-        labels,
-        num_classes
-    )
-
 
     return {
-        "accuracy": acc,
-        "precision": p,
-        "recall": r,
-        "f1": score_f1
+
+        "loss":
+            total_loss / len(loader),
+
+        "accuracy":
+            metrics.accuracy(),
+
+        "precision":
+            metrics.precision(),
+
+        "recall":
+            metrics.recall(),
+
+        "f1":
+            metrics.f1()
     }
 
 # 训练函数
 def train(config):
 
+    # 设置随机种子
     seed_everything()
 
 
@@ -147,11 +137,21 @@ def train(config):
         experiment_name=config.experiment_name,
 
         config={
-            "model_name": config.model_name,
-            "max_length": config.max_length,
-            "batch_size": config.batch_size,
-            "lr": config.lr,
-            "epochs": config.epochs
+
+            "model_name":
+                config.model_name,
+
+            "max_length":
+                config.max_length,
+
+            "batch_size":
+                config.batch_size,
+
+            "lr":
+                config.lr,
+
+            "epochs":
+                config.epochs
         }
     )
 
@@ -174,6 +174,7 @@ def train(config):
     test_data = load_data(
         config.test_path
     )
+
 
     # 2. 获取类别
     label_names = set()
@@ -217,11 +218,17 @@ def train(config):
         for label, i in label2id.items()
 
     }
+
+
     # 3. 添加数字标签
     for dataset in [
+
         train_data,
+
         dev_data,
+
         test_data
+
     ]:
 
         for item in dataset:
@@ -232,33 +239,49 @@ def train(config):
 
     # Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
+
         config.model_name
+
     )
 
     # 动态 Padding
     collate_fn = get_collate_fn(
+
         tokenizer
+
     )
 
     # 4. Dataset
     train_dataset = NewsDataset(
+
         train_data,
+
         tokenizer,
+
         config
+
     )
 
 
     dev_dataset = NewsDataset(
+
         dev_data,
+
         tokenizer,
+
         config
+
     )
 
 
     test_dataset = NewsDataset(
+
         test_data,
+
         tokenizer,
+
         config
+
     )
 
     # DataLoader
@@ -300,6 +323,7 @@ def train(config):
 
     )
 
+
     # 5. 创建模型
     model = BertClassifier(
 
@@ -308,6 +332,7 @@ def train(config):
         num_classes
 
     )
+
 
     model.to(device)
 
@@ -325,15 +350,16 @@ def train(config):
     loss_fn = torch.nn.CrossEntropyLoss()
 
 
-    # 最佳F1
+    # 保存最佳 Dev F1
     best = 0
-
-
-    # 6. 训练
+    # 6. Train + Dev
     for epoch in range(
+
         config.epochs
+
     ):
 
+        # Train
         model.train()
 
         total_loss = 0
@@ -373,7 +399,7 @@ def train(config):
             )
 
 
-            # Loss
+            # 计算 Loss
             loss = loss_fn(
 
                 logits,
@@ -414,7 +440,7 @@ def train(config):
             total += y.size(0)
 
 
-        # Train指标
+        # Train Loss
         train_loss = (
 
             total_loss /
@@ -424,6 +450,7 @@ def train(config):
         )
 
 
+        # Train Accuracy
         train_accuracy = (
 
             correct /
@@ -432,58 +459,59 @@ def train(config):
 
         )
 
-        # 7. Dev验证
+        # Dev
         result = evaluate(
 
             model,
 
             dev_loader,
 
+            loss_fn,
+
             num_classes
 
         )
 
 
+        # 打印结果
         print(
             "===================="
         )
-
 
         print(
             "Epoch:",
             epoch + 1
         )
 
-
         print(
             "Train Loss:",
             train_loss
         )
-
 
         print(
             "Train Accuracy:",
             train_accuracy
         )
 
+        print(
+            "Dev Loss:",
+            result["loss"]
+        )
 
         print(
             "Dev Accuracy:",
             result["accuracy"]
         )
 
-
         print(
             "Dev Precision:",
             result["precision"]
         )
 
-
         print(
             "Dev Recall:",
             result["recall"]
         )
-
 
         print(
             "Dev F1:",
@@ -500,6 +528,9 @@ def train(config):
             "Train Accuracy":
                 train_accuracy,
 
+            "Dev Loss":
+                result["loss"],
+
             "Dev Accuracy":
                 result["accuracy"],
 
@@ -515,7 +546,8 @@ def train(config):
         })
 
 
-        # 保存最佳模型
+        # 保存最佳 Dev Model
+
         if result["f1"] > best:
 
             best = result["f1"]
@@ -531,11 +563,30 @@ def train(config):
 
 
             print(
+
                 "保存最佳模型，Dev F1 =",
+
                 best
+
             )
 
-    # 8. 加载最佳模型
+
+    # 训练结束
+    print(
+        "===================="
+    )
+
+    print(
+        "训练完成"
+    )
+
+    print(
+        "最佳 Dev F1:",
+        best
+    )
+
+
+    # 7. 加载最佳 Dev Model
     model.load_state_dict(
 
         torch.load(
@@ -549,53 +600,66 @@ def train(config):
     )
 
 
-    # 9. Test Evaluation
+    print(
+        "已加载最佳 Dev Model"
+    )
+
+
+    # 8. Test
     test_result = evaluate(
 
         model,
 
         test_loader,
 
+        loss_fn,
+
         num_classes
 
     )
 
+    # Test结果
 
     print(
         "===================="
     )
 
-
     print(
         "Test Result"
     )
 
+    print(
+        "Test Loss:",
+        test_result["loss"]
+    )
 
     print(
-        "test accuracy:",
+        "Test Accuracy:",
         test_result["accuracy"]
     )
 
-
     print(
-        "test precision:",
+        "Test Precision:",
         test_result["precision"]
     )
 
-
     print(
-        "test recall:",
+        "Test Recall:",
         test_result["recall"]
     )
 
-
     print(
-        "test f1:",
+        "Test F1:",
         test_result["f1"]
     )
 
+
     # SwanLab记录Test
+
     swanlab.log({
+
+        "Test Loss":
+            test_result["loss"],
 
         "Test Accuracy":
             test_result["accuracy"],
@@ -613,6 +677,7 @@ def train(config):
 
 
 # 主程序
+
 if __name__ == "__main__":
 
     # 解析命令行参数
